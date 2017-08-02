@@ -1,0 +1,182 @@
+from __future__ import print_function
+import os
+import re
+import sys
+import json
+import nltk
+from nltk import corpus
+
+regx = 'CI-[0-9]'
+regex = re.compile(regx)
+# import api
+try:
+    import apiai
+except ImportError:
+    sys.path.append(
+        os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            os.pardir,
+            os.pardir
+        )
+    )
+
+    import apiai
+
+CLIENT_ACCESS_TOKEN = '0dd45e4dcd204c8c80490094894daf11'
+
+
+def create_ticket(info_list):
+    import requests
+
+    url = 'https://dev23984.service-now.com/api/now/table/incident'
+    user = 'admin'
+    pwd = 'Tusharbhatt92'
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    # info_list=json.loads(info_list)
+
+    response = requests.post(url, auth=(user, pwd), headers=headers, data=json.dumps(info_list))
+
+    if response.status_code != 201:
+        # print('Status:', response.status_code, 'Headers:', response.headers, 'Error Response:', response.json())
+        print("\n error in logging your request")
+        exit()
+    else:
+        response = response.json()
+        print("\n" + "  your ticket has been generated and your ticket no is  {}".format(response['result']['number']))
+
+        exit()
+        # data = response.json()
+        # data1=json.dump(data)
+        # print(data)
+
+
+def check_details(info_list):
+    import requests
+    # import json
+    user = 'admin'
+    pwd = 'Tusharbhatt92'
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if 'caller_id' in info_list.keys():
+        listt = str(info_list['caller_id']).split(' ')
+        response = (requests.get(
+            'https://dev23984.service-now.com/api/now/table/sys_user?sysparm_query=name={}%20{}&sysparm_limit=1'.format(
+                listt[0], listt[1]), auth=(user, pwd), headers=headers)).json()
+        # response1=json.loads(response)
+        # print(response1)
+        # print(type(response))
+        # response=response.json()
+        # print(type(response))
+        # response=json.dumps(response)
+        # rint(type(response))
+        # print(response)
+        # var1=str(response['result'])
+        # print(var1)
+        # try:
+        #     if response['sys_created_by'] == 'admin':
+        #         return True
+        # except:
+        #     return False
+        if not response['result']:
+            return False
+        else:
+            return True
+
+    if 'cmdb_ci' in info_list.keys():
+        data = info_list['cmdb_ci']
+        data = data.strip()
+        response = (requests.get(
+            'https://dev23984.service-now.com/api/now/table/cmdb_ci?sysparm_query=name={}&sysparm_limit=1'.format(data),
+            auth=(user, pwd), headers=headers)).json()
+        if not response['result']:
+            return False
+        else:
+            return True
+
+
+def update_ticket(info_list):
+    pass
+
+
+def main():
+    import requests
+
+    info_list = {}
+
+    ai = apiai.ApiAI(CLIENT_ACCESS_TOKEN)
+    chat_list = []
+    while True:
+        temp_list = {}
+
+        print(u"> ", end=u"")
+        user_message = input()
+
+        if user_message in u"exit":
+            break
+
+        request = ai.text_request()
+        request.query = user_message
+        response = json.loads(request.getresponse().read().decode('utf-8'))
+        speech = response['result']['fulfillment']['speech']
+
+        intent_name = response['result']['metadata']['intentName']
+        if intent_name not in ("get_name", "Issues", "CIs"):
+            print(u"< %s" % response['result']['fulfillment']['speech'])
+        # counter=0
+        if intent_name == 'get_name':
+            first_name = response['result']['parameters']['cust_name']
+            last_name = response['result']['parameters']['last_name']
+            name = first_name[0] + " " + last_name[0]
+            info_list['caller_id'] = name
+            temp_list['caller_id'] = name
+            # print(temp_list['caller_id'])
+            # cond=False
+            # while cond is False:
+            cond = check_details(temp_list)
+            # print(cond)
+            if cond is False:
+                print("\n {} is not a valid name in the ITSM  enter a valid name".format(temp_list['caller_id']))
+                # temp_list['caller_id']=input()
+                # user_message=input()
+                # request.query=user_message
+                # info_list['caller_id']=temp_list['caller_id']
+            if cond is True:
+                print(u"< %s" % response['result']['fulfillment']['speech'])
+
+        if intent_name == 'Issues':
+            temp = response['result']['resolvedQuery']
+            info_list["short_description"] = temp.strip()
+
+            # temp_list['short_description'] = temp.strip()
+            # cond=check_details(temp_list)
+            print(u"< %s" % response['result']['fulfillment']['speech'])
+
+        if intent_name == 'CIs':
+            temp = response['result']['resolvedQuery']
+            info_list['cmdb_ci'] = temp.strip()
+            temp_list['cmdb_ci'] = temp.strip()
+            cond = check_details(temp_list)
+            if cond is False:
+                print("\n {} is not a valid CI number in our ITSM  please enter the correct CI".format(
+                    temp_list['cmdb_ci']))
+                continue
+            else:
+
+                info_list['impact'] = input("enter the impact of the incedent 1 for high.. 2 for normal.. 3 for low   ")
+                info_list['urgency'] = input("enter the urgency of incident  1 for major.. 2 for significant.. 3 for minor  ")
+
+                print(u"< %s" % response['result']['fulfillment']['speech'])
+                if speech == "Ok! Thanks for registering with us! .":
+                    # print(speech)
+                    print("\n please wait while we generate your ticket")
+                    create_ticket(info_list)
+                    break
+
+
+
+
+                    # if str(response['result']['fulfillment']['speech']) == "Ok! Thanks for registering with us!":
+                    # create_ticket(info_list)
+
+
+if __name__ == '__main__':
+    main()
